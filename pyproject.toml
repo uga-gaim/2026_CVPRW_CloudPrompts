@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "weather_mind"
+version = "0.1.0"
+description = "AI framework for understanding sky images."
+readme = "README.md"
+authors = [{name = "Weiming Hu", email = "weiming@uga.edu"}]
+license = {file = "LICENSE"}
+requires-python = ">=3.10"
+
+dependencies = [
+    "pandas",
+    "numpy",
+    "matplotlib",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["weather_mind*"]
