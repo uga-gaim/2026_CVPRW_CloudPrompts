@@ -240,7 +240,8 @@ def create_final_label_dataset(
             )
             
             if not np.isnan(target_value):
-                valid_image_paths.append(image_path)
+                abs_image_path = str(Path(image_path).expanduser().resolve())
+                valid_image_paths.append(abs_image_path)
                 target_values.append(target_value)
         
         except Exception as e:
