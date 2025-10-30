@@ -17,7 +17,13 @@ import glob
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+import logging
 
+logging.basicConfig(
+    level=logging.WARNING,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 def extract_timestamp_from_image(image_path: str) -> datetime.datetime:
     """
@@ -77,7 +83,7 @@ def load_and_clean_asos_data(asos_file_path: str) -> pd.DataFrame:
     
     asos_df['timestamp'] = pd.to_datetime(asos_df[timestamp_col])
 
-    precip_cols = ['p01i', 'precip', 'precipitation', 'p01m', 'p01']
+    precip_cols = ['p01m', 'p01i', 'precip', 'precipitation', 'p01']
     precip_col = None
     for col in precip_cols:
         if col in asos_df.columns:
@@ -135,7 +141,7 @@ def generate_prediction_target(
         mask = (asos_df['timestamp'] >= start_time) & (asos_df['timestamp'] < end_time)
         window_data = asos_df.loc[mask]
     except Exception as e:
-        print(f"Error filtering data for time window {start_time} to {end_time}: {e}")
+        logger.error(f"Error filtering data for time window {start_time} to {end_time}: {e}")
         return np.nan
 
     if window_data.empty:
@@ -179,6 +185,7 @@ def create_final_label_dataset(
         image_paths.extend(glob.glob(os.path.join(image_dir, ext)))
 
     if len(image_paths) == 0:
+        logger.error(f"No images found in directory: {image_dir}")
         raise ValueError(f"No images found in directory: {image_dir}")
     
     print(f"Found {len(image_paths)} images in {image_dir}")
@@ -203,7 +210,7 @@ def create_final_label_dataset(
                 target_values.append(target_value)
         
         except Exception as e:
-            print(f"Warning: Skipping {image_path} due to error: {e}")
+            logger.warning(f"Skipping {image_path} due to error: {e}")
             continue
     
     labeled_data_df = pd.DataFrame({
