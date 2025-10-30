@@ -107,13 +107,31 @@ def load_and_clean_asos_data(asos_file_path: str) -> pd.DataFrame:
 
     return asos_df[['timestamp', 'precipitation_value']]
 
+def detect_asos_interval(asos_df: pd.DataFrame) -> int:
+    """
+    Detects the record interval (in minutes) of ASOS data.
+    
+    Returns:
+        interval in minutes (e.g., 60 for hourly, 20 for 20-minute intervals)
+    """
+    if len(asos_df) < 2:
+        logger.warning("ASOS DataFrame has fewer than 2 records; cannot determine interval")
+        return 60
+    
+    time_diffs = asos_df['timestamp'].diff().dt.total_seconds() / 60
+    time_diffs = time_diffs.dropna()
+    most_common_interval = time_diffs.mode()[0] if len(time_diffs) > 0 else 60
+    logger.info(f"Detected ASOS record interval: {most_common_interval} minutes")
+    return int(most_common_interval)
+
 
 def generate_prediction_target(
         image_datetime: datetime.datetime,
         asos_df: pd.DataFrame,
         lead_time_min: int,
         mode:str,
-        precip_threshold:float
+        precip_threshold:float,
+        record_interval: int = None
 ) -> float:
     """
     Determines the precipitation target by querying ASOS data.
@@ -124,13 +142,19 @@ def generate_prediction_target(
         lead_time_min: Lead time in minutes
         mode: 'binary' for classification or 'regression' for continuous values
         precip_threshold: Threshold to define storm in binary mode
+        record_interval_min: int, optional
+            The precipitation record interval in minutes.
+            If None, the interval will be auto-detected from the ASOS data.
+            This determines the size of the time window for precipitation summation.
 
     Returns:
         target_value: int for binary mode, float for regression mode
     """
+    if record_interval is None:
+        record_interval = detect_asos_interval(asos_df)
 
     start_time = image_datetime + datetime.timedelta(minutes=lead_time_min)
-    end_time = start_time + datetime.timedelta(minutes=60)
+    end_time = start_time + datetime.timedelta(minutes=record_interval)
 
     if start_time.tzinfo is not None:
         start_time = start_time.replace(tzinfo=None)
@@ -162,7 +186,8 @@ def create_final_label_dataset(
         asos_df: pd.DataFrame,
         lead_time_min: int,
         mode: str,
-        precip_threshold: float
+        precip_threshold: float,
+        record_interval_min: int = None
 ) -> pd.DataFrame:
     """
     Creates the final labeled dataset by processinf all images.
@@ -173,13 +198,21 @@ def create_final_label_dataset(
         lead_time_min: Lead time in minutes for prediction
         mode: 'binary' or 'regression'
         precip_threshold: Threshold for binary classification
+        record_interval_min: int, optional
+            The ASOS precipitation record interval in minutes.
+            If None, the interval will be auto-detected once from the ASOS dataset.
+            Controls the prediction window length per image.
     
     Returns:
         pd.DataFrame with columns: image_path, target_value
     """
+    if record_interval_min is None:
+        record_interval_min = detect_asos_interval(asos_df)
 
     image_extensions = ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']
     image_paths = []
+
+    print(f"Using record_interval_min = {record_interval_min}")
 
     for ext in image_extensions:
         image_paths.extend(glob.glob(os.path.join(image_dir, ext)))
@@ -202,7 +235,8 @@ def create_final_label_dataset(
                 asos_df,
                 lead_time_min,
                 mode,
-                precip_threshold
+                precip_threshold,
+                record_interval_min
             )
             
             if not np.isnan(target_value):
