@@ -212,7 +212,7 @@ def remove_bottom_bar_from_folder(
     output_suffix: str = "_clean",
     exts: tuple[str, ...] = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"),
     overwrite: bool = False,
-    verbose: bool = True,
+    verbose: bool = False,
 ) -> Path:
     """
     Removes `bar_height` pixels from the bottom of all images in a folder and saves
