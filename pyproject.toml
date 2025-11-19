@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "AI framework for understanding sky images."
 readme = "README.md"
 authors = [
-    {name = "Weiming Hu", email = "weiming@uga.edu"}
+    {name = "Weiming Hu", email = "weiming@uga.edu"},
     {name = "Harshith Kethavath", email = "hello@harshithkethavath.com"}
 ]
 license = {file = "LICENSE"}
@@ -20,6 +20,5 @@ dependencies = [
     "matplotlib",
 ]
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["weather_mind*"]
+[tool.setuptools]
+packages = ["weather_mind"]
