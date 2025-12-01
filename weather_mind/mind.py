@@ -3,7 +3,7 @@ Object-Oriented wrapper around different WeatherMind models.
 """
 
 from __future__ import annotations
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Iterable
 from pathlib import Path
 
 import torch
@@ -18,6 +18,8 @@ from transformers import (
 )
 
 import re
+import pandas as pd
+import numpy as np
 
 from transformers.utils import logging as hf_logging
 
@@ -413,6 +415,11 @@ def _load_image(input_data: Any) -> Image.Image:
         "Pass a PIL.Image.Image or a path string/Path."
     )
 
+def _safe_float(val):
+    try:
+        return float(val)
+    except Exception:
+        return None
 
 #############################################
 ############# Main OOP Wrapper ##############
@@ -428,10 +435,20 @@ class WeatherMind:
         msg = mind.process_input(img)
     """
 
-    def __init__(self, default_model_name: str = DEFAULT_MODEL_NAME):
+    def __init__(
+        self,
+        default_model_name: str = DEFAULT_MODEL_NAME,
+        metadata_csv: Optional[str] = None,
+        default_context_hours: Optional[float] = None,
+    ):
         self.default_model_name = default_model_name.upper()
         self.model: Optional[BaseWeatherModel] = None
         self.current_model_name: Optional[str] = None
+
+        self.metadata_df: Optional[pd.DataFrame] = None
+        self.default_context_hours: Optional[float] = default_context_hours
+        if metadata_csv is not None:
+            self.load_metadata_csv(metadata_csv)
 
     def load_model(self, model_name: str | None = None) -> None:
         """
@@ -487,32 +504,205 @@ class WeatherMind:
         self,
         input_data: Any,
         template: Optional[str] = None,
+        use_metadata: bool = True,
+        context_hours: Optional[float] = None,
     ) -> Any:
         """
         Run the current model on `input_data` and format the output.
 
         Args:
-            input_data: What you pass to the model (image, path, dict, etc.).
-            template: Optional prompt/question string. Falls back to DEFAULT_TEMPLATE.
-
-        Returns:
-            Formatted model output (string you can print directly).
+            input_data: Image, path, etc.
+            template: User question / prompt.
+            use_metadata: If True and metadata_df is loaded, prepend weather context.
+            context_hours: Size of the time window (in hours) to use for context.
+                           If None, uses self.default_context_hours.
+                           If still None, only the single row for this image is used.
         """
         if self.model is None:
             self.load_model()
 
-        question = template or DEFAULT_TEMPLATE
+        base_question = template or DEFAULT_TEMPLATE
+
+        effective_context_hours: Optional[float] = (
+            context_hours
+            if context_hours is not None
+            else self.default_context_hours
+        )
+
+        context_str: Optional[str] = None
+        if use_metadata and self.metadata_df is not None:
+            if isinstance(input_data, (str, Path)):
+                context_str = self._build_weather_context_for_image(
+                    str(input_data),
+                    context_hours=effective_context_hours,
+                )
+
+        if context_str:
+            question = (
+                f"{context_str}\n\n"
+                "Using both the image and the measurements above, "
+                "answer the following question about future or current weather:\n"
+                f"{base_question}"
+            )
+        else:
+            question = base_question
+
         raw_answer = self.model(input_data, question)
 
         raw_output = {
             "model_name": self.current_model_name or "UNKNOWN",
-            "question": question,
+            "question": base_question,
             "answer": raw_answer,
         }
 
         formatted_output = self.__format_output__(raw_output)
         return formatted_output
+
+
     
+    def load_metadata_csv(self, csv_path: str) -> None:
+        """
+        Load per-image weather metadata from a CSV.
+
+        Expected columns include at least:
+            - image_path
+            - date, time
+            - humidity_pct, temperature_f, feels_like_f
+            - pressure_hpa, wind_speed_mph, gust_speed_mph
+            - rain_today_in
+        """
+        df = pd.read_csv(csv_path)
+
+        if "image_path" not in df.columns:
+            raise ValueError(
+                f"metadata CSV must contain an 'image_path' column. "
+                f"Got columns: {df.columns.tolist()}"
+            )
+
+        df["image_path"] = df["image_path"].astype(str)
+
+        if "date" in df.columns and "time" in df.columns:
+            df["datetime"] = pd.to_datetime(
+                df["date"].astype(str) + " " + df["time"].astype(str),
+                errors="coerce",
+            )
+
+        self.metadata_df = df
+
+
+    def _build_weather_context_for_image(
+        self,
+        image_path: str,
+        context_hours: Optional[float] = None,
+    ) -> Optional[str]:
+        """
+        Given an image path, look up its row in metadata_df and build a short
+        natural-language context string describing weather up to that timestamp.
+
+        If context_hours is None:
+            use only the row matching this image.
+
+        If context_hours is a number (e.g. 1, 2, 6):
+            use all rows whose datetime is within [t0 - context_hours, t0],
+            where t0 is the timestamp of the image row.
+        """
+        if self.metadata_df is None:
+            return None
+
+        df = self.metadata_df
+
+        if "image_path" not in df.columns:
+            return None
+
+        img_name = Path(image_path).name
+
+        matches = df[df["image_path"].astype(str).str.endswith(img_name)]
+        if matches.empty:
+            return None
+
+        anchor_row = matches.iloc[-1]
+
+        use_window = (
+            context_hours is not None
+            and "datetime" in df.columns
+            and pd.notna(anchor_row.get("datetime", pd.NaT))
+        )
+
+        if not use_window:
+            rows = [anchor_row]
+        else:
+            t0 = anchor_row["datetime"]
+            start_time = t0 - pd.Timedelta(hours=float(context_hours))
+
+            window_df = df.copy()
+            window_df = window_df[
+                (window_df["datetime"] >= start_time)
+                & (window_df["datetime"] <= t0)
+            ].sort_values("datetime")
+
+            if window_df.empty:
+                rows = [anchor_row]
+            else:
+                rows = [r for _, r in window_df.iterrows()]
+
+        lines: list[str] = []
+
+        if len(rows) == 1:
+            header = "Weather station measurements up to the time of this image:"
+        else:
+            header = (
+                "Weather station measurements for the hours leading up to this image "
+                f"(last {context_hours:g} hours):"
+            )
+        lines.append(header)
+
+        for r in rows:
+            if "datetime" in r and pd.notna(r["datetime"]):
+                ts_str = str(r["datetime"])
+            else:
+                date = r.get("date", None)
+                time = r.get("time", None)
+                bits = []
+                if pd.notna(date):
+                    bits.append(str(date))
+                if pd.notna(time):
+                    bits.append(str(time))
+                ts_str = " ".join(bits) if bits else "Unknown time"
+
+            row_parts = [f"Time {ts_str}"]
+
+            def add_num_short(label: str, key: str, unit: Optional[str] = None):
+                if key not in r:
+                    return
+                val = r[key]
+                if pd.isna(val):
+                    return
+
+                v = _safe_float(val)
+                if v is None:
+                    return
+                value_str = f"{v:.1f}"
+
+                if unit:
+                    row_parts.append(f"{label}={value_str}{unit}")
+                else:
+                    row_parts.append(f"{label}={value_str}")
+
+            add_num_short("RH", "humidity_pct", "%")
+            add_num_short("T", "temperature_f", "°F")
+            add_num_short("T_feels", "feels_like_f", "°F")
+            add_num_short("P", "pressure_hpa", " hPa")
+            add_num_short("Wind", "wind_speed_mph", " mph")
+            add_num_short("Gust", "gust_speed_mph", " mph")
+            add_num_short("Rain_today", "rain_today_in", " in")
+
+            lines.append("- " + ", ".join(row_parts))
+
+        context = "\n".join(lines)
+        return context
+
+
+
     @staticmethod
     def _clean_answer_text(text: str) -> str:
         """
