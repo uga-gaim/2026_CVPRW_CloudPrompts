@@ -1,0 +1,1 @@
+mIoU=0.3906  shad:0.386 | shad_w:0.000 | water:0.269 | snow:0.484 | land:0.770 | cloud:0.825 | flood:0.000
