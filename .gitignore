@@ -1,0 +1,4 @@
+*.ckpt
+__pycache__
+external
+sparcs_data_L8
