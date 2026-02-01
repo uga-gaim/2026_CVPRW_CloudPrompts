@@ -68,12 +68,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--root",
-        default="./code/data/cloudsen12plus/cloudsen12plus_p509",
+        default="./cloudsen12plus_p509",
         help="Folder containing train/validation/test .mlstac files (default: %(default)s)"
     )
     ap.add_argument(
         "--out",
-        default="./code/data/cloudsen12plus/export_p509_high_npz",
+        default="./export_p509_high_npz",
         help="Output dataset folder (default: %(default)s)"
     )
     ap.add_argument("--crop509", action="store_true", help="Crop padded 512->509 (removes left+bottom padding)")

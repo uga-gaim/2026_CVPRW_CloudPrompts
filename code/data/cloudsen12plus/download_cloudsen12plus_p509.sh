@@ -17,7 +17,7 @@ set -euo pipefail
 
 REPO="${REPO:-isp-uv-es/CloudSEN12Plus}"
 MODE="${MODE:-high}"
-OUT_DIR="./code/data/cloudsen12plus/cloudsen12plus_p509"
+OUT_DIR="./cloudsen12plus_p509"
 
 
 echo "==> Repo:    ${REPO}"
