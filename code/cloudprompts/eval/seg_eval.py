@@ -120,6 +120,7 @@ def confusion_matrix_from_masks(
     y_pred: ArrayLike,
     num_classes: int,
     ignore_index: Optional[int] = None,
+    strict: bool = True,
 ) -> np.ndarray:
     yt = _to_numpy(y_true).astype(np.int64, copy=False)
     yp = _to_numpy(y_pred).astype(np.int64, copy=False)
@@ -131,9 +132,22 @@ def confusion_matrix_from_masks(
         yt = yt[keep]
         yp = yp[keep]
 
-    keep = (yt >= 0) & (yt < num_classes) & (yp >= 0) & (yp < num_classes)
-    yt = yt[keep]
-    yp = yp[keep]
+    bad_true = (yt < 0) | (yt >= num_classes)
+    bad_pred = (yp < 0) | (yp >= num_classes)
+
+    if strict:
+        if bad_true.any():
+            vals = np.unique(yt[bad_true])[:20]
+            raise ValueError(f"y_true has out-of-range labels (expected 0..{num_classes-1}). "
+                             f"Examples: {vals} (count={bad_true.sum()})")
+        if bad_pred.any():
+            vals = np.unique(yp[bad_pred])[:20]
+            raise ValueError(f"y_pred has out-of-range labels (expected 0..{num_classes-1}). "
+                             f"Examples: {vals} (count={bad_pred.sum()})")
+    else:
+        keep = ~(bad_true | bad_pred)
+        yt = yt[keep]
+        yp = yp[keep]
 
     k = yt * num_classes + yp
     cm = np.bincount(k, minlength=num_classes * num_classes).reshape(num_classes, num_classes)
