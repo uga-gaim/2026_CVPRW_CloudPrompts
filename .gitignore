@@ -9,3 +9,4 @@ code/data/cloudsen12plus/export_p509_high_npz
 *.out
 *sub.sh
 *.DS_Store
+code/inference/clipseg_cloudsen_zs/masks
