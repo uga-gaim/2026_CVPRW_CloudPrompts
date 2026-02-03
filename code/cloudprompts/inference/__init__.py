@@ -1,4 +1,4 @@
-from .clipseg_cloudsen import (
+from .clipseg import (
     run,
 )
 __all__ = [

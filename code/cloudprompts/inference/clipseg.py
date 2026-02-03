@@ -8,9 +8,9 @@ import torch
 import torch.nn.functional as F
 from transformers import CLIPSegProcessor, CLIPSegForImageSegmentation
 
-
 DEFAULT_PROMPTS = ["clear", "thick cloud", "thin cloud", "cloud shadow"]
 DEFAULT_LABELS  = [0, 1, 2, 3]
+
 
 def _load_export_npz_as_pil(npz_path: Path) -> tuple[Image.Image, int, int]:
     with np.load(npz_path) as z:
@@ -30,11 +30,9 @@ def _load_export_npz_as_pil(npz_path: Path) -> tuple[Image.Image, int, int]:
     return Image.fromarray(hwc, mode="RGB"), H, W
 
 
-
-
 @torch.no_grad()
 def _predict_mask_clipseg(
-    model: CLIPSegForImageSegmentation,
+    model,
     processor: CLIPSegProcessor,
     image_pil: Image.Image,
     prompts: list[str],
@@ -63,21 +61,21 @@ def _predict_mask_clipseg(
     else:
         outputs = model(**inputs)
 
-    logits = outputs.logits
+    logits = outputs.logits  # [N, Hm, Wm]
     H, W = out_hw
 
     logits = F.interpolate(
-        logits.unsqueeze(1),
+        logits.unsqueeze(1),   # [N,1,Hm,Wm]
         size=(H, W),
         mode="bilinear",
         align_corners=False,
-    ).squeeze(1)
+    ).squeeze(1)              # [N,H,W]
 
     pred_idx = torch.argmax(logits, dim=0).to("cpu").numpy().astype(np.uint8)
-
     label_lut = np.array(label_ids, dtype=np.uint8)
     pred_mask = label_lut[pred_idx]
     return pred_mask
+
 
 def pick_device(user_device: str | None = None) -> str:
     """
@@ -93,6 +91,39 @@ def pick_device(user_device: str | None = None) -> str:
     return "cpu"
 
 
+def load_model_and_processor(
+    model_id: str,
+    device: str,
+    use_adapter: bool,
+    adapter_dir: str | None,
+):
+    """
+    If use_adapter=True, loads base CLIPSeg + LoRA adapter from adapter_dir (checkpoint folder).
+    adapter_dir must contain adapter_model.safetensors + adapter_config.json.
+    """
+    processor = CLIPSegProcessor.from_pretrained(model_id)
+
+    base = CLIPSegForImageSegmentation.from_pretrained(model_id)
+
+    if use_adapter:
+        if not adapter_dir:
+            raise ValueError("--use_adapter was set but --adapter_dir was not provided.")
+        try:
+            from peft import PeftModel
+        except Exception as e:
+            raise RuntimeError(
+                "peft is required for --use_adapter. Install with: pip install peft\n"
+                f"Original error: {repr(e)}"
+            )
+        model = PeftModel.from_pretrained(base, adapter_dir)
+    else:
+        model = base
+
+    model = model.to(device)
+    model.eval()
+    return processor, model
+
+
 def run(
     data_root: str,
     out_root: str,
@@ -102,12 +133,13 @@ def run(
     prompts: list[str] | None = None,
     label_ids: list[int] | None = None,
     skip_existing: bool = True,
+    use_adapter: bool = False,
+    adapter_dir: str | None = None,
 ) -> None:
     data_root = str(data_root)
     out_root = str(out_root)
 
     device = pick_device(device)
-
     prompts = prompts or DEFAULT_PROMPTS
     label_ids = label_ids or DEFAULT_LABELS
 
@@ -118,15 +150,19 @@ def run(
     out_masks = Path(out_root) / "masks"
     out_masks.mkdir(parents=True, exist_ok=True)
 
-    processor = CLIPSegProcessor.from_pretrained(model_id)
-    model = CLIPSegForImageSegmentation.from_pretrained(model_id).to(device)
-    model.eval()
+    processor, model = load_model_and_processor(
+        model_id=model_id,
+        device=device,
+        use_adapter=use_adapter,
+        adapter_dir=adapter_dir,
+    )
 
     img_paths = sorted(in_images.glob("*.npz"))
     if not img_paths:
         raise FileNotFoundError(f"No .npz files found in: {in_images}")
 
-    for img_npz in tqdm(img_paths, desc=f"clipseg zs: {Path(data_root).name}"):
+    tag = "lora" if use_adapter else "zs"
+    for img_npz in tqdm(img_paths, desc=f"clipseg {tag}: {Path(data_root).name}"):
         stem = img_npz.stem
         out_npz = out_masks / f"{stem}.npz"
 
@@ -150,19 +186,30 @@ def run(
 
 def _parse_args():
     ap = argparse.ArgumentParser(
-        description="Run zero-shot CLIPSeg on CloudSEN export npz and write predicted masks as npz."
+        description="Run CLIPSeg on CloudSEN export npz and write predicted masks as npz. "
+                    "Optionally load a LoRA adapter checkpoint."
     )
     ap.add_argument("--data_root", required=True,
-                    help="Path to export root that contains split/images/*.npz")
+                    help="Directory containing *.npz images (e.g., .../test/images)")
     ap.add_argument("--out_root", required=True,
-                    help="Output root; will create split/masks/*.npz")
+                    help="Output root; writes out_root/masks/*.npz")
     ap.add_argument("--model_id", default="CIDAS/clipseg-rd64-refined")
-    ap.add_argument("--device", default=None, help="cuda or cpu (default auto)")
+    ap.add_argument("--device", default=None, help="cuda/cpu/mps (default auto)")
+    ap.add_argument("--amp", action="store_true", help="Use autocast fp16 on CUDA")
+
+    # ✅ new: adapter inference toggle + path
+    ap.add_argument("--use_adapter", action="store_true",
+                    help="If set, load a LoRA adapter from --adapter_dir (fine-tuned checkpoint).")
+    ap.add_argument("--adapter_dir", type=str, default=None,
+                    help="Path to checkpoint folder containing adapter_model.safetensors. "
+                         "Example: .../checkpoint-1000")
 
     ap.add_argument("--prompts", nargs="+", default=None,
                     help="Override prompts, e.g. --prompts clear 'thick cloud' 'thin cloud' 'cloud shadow'")
     ap.add_argument("--label_ids", nargs="+", type=int, default=None,
                     help="Override label ids aligned to prompts, e.g. --label_ids 0 1 2 3")
+    ap.add_argument("--no_skip_existing", action="store_true",
+                    help="If set, do NOT skip existing outputs (recompute everything).")
     return ap.parse_args()
 
 
@@ -173,8 +220,12 @@ def main():
         out_root=args.out_root,
         model_id=args.model_id,
         device=args.device,
+        amp=args.amp,
         prompts=args.prompts,
         label_ids=args.label_ids,
+        skip_existing=(not args.no_skip_existing),
+        use_adapter=args.use_adapter,
+        adapter_dir=args.adapter_dir,
     )
 
 
