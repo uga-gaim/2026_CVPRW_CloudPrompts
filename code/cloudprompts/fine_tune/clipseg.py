@@ -374,11 +374,14 @@ def main():
         dataloader_num_workers=args.num_workers,
         remove_unused_columns=False,
 
+        label_names=["labels"],
+
         fp16=args.fp16,
         bf16=args.bf16,
 
-        report_to="none",
-        load_best_model_at_end=False,
+        load_best_model_at_end=True,
+        metric_for_best_model="iou",
+        greater_is_better=True,
     )
 
     def compute_metrics(eval_pred):
