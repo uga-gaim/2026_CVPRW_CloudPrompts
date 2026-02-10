@@ -61,15 +61,15 @@ def _predict_mask_clipseg(
     else:
         outputs = model(**inputs)
 
-    logits = outputs.logits  # [N, Hm, Wm]
+    logits = outputs.logits
     H, W = out_hw
 
     logits = F.interpolate(
-        logits.unsqueeze(1),   # [N,1,Hm,Wm]
+        logits.unsqueeze(1),
         size=(H, W),
         mode="bilinear",
         align_corners=False,
-    ).squeeze(1)              # [N,H,W]
+    ).squeeze(1)
 
     pred_idx = torch.argmax(logits, dim=0).to("cpu").numpy().astype(np.uint8)
     label_lut = np.array(label_ids, dtype=np.uint8)
@@ -197,7 +197,7 @@ def _parse_args():
     ap.add_argument("--device", default=None, help="cuda/cpu/mps (default auto)")
     ap.add_argument("--amp", action="store_true", help="Use autocast fp16 on CUDA")
 
-    # ✅ new: adapter inference toggle + path
+
     ap.add_argument("--use_adapter", action="store_true",
                     help="If set, load a LoRA adapter from --adapter_dir (fine-tuned checkpoint).")
     ap.add_argument("--adapter_dir", type=str, default=None,
