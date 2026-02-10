@@ -11,3 +11,4 @@ code/data/cloudsen12plus/export_p509_high_npz
 *sub_inf.sh
 *.DS_Store
 code/inference/clipseg_cloudsen_zs/masks
+code/fine_tune
