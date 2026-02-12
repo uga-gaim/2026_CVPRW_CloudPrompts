@@ -22,9 +22,7 @@ def _require(pkg: str, hint: str) -> None:
 
 
 _require("transformers", "Install with: pip install transformers")
-_require("peft", "Install with: pip install peft")
 from transformers import TrainingArguments, Trainer, set_seed
-from peft import LoraConfig, get_peft_model
 
 try:
     from .models import get_model_adapter
@@ -57,6 +55,7 @@ def iou_from_logits(logits: torch.Tensor, targets: torch.Tensor, thresh: float =
     inter = (preds * targets).sum(dim=(1, 2))
     union = (preds + targets - preds * targets).sum(dim=(1, 2))
     return ((inter + eps) / (union + eps)).mean()
+
 
 class ImprovedSegLoss(torch.nn.Module):
     """
@@ -160,7 +159,6 @@ def print_trainable_params(model: torch.nn.Module) -> None:
     print(f"Trainable params: {trainable:,} / {total:,} ({pct:.2f}%)")
 
 
-
 class CloudSENPromptDataset(Dataset):
     """
     CloudSEN12+ NPZ dataset flattened into (image, prompt, binary_mask) samples.
@@ -193,7 +191,7 @@ class CloudSENPromptDataset(Dataset):
 
         if dataset_name.strip().lower() != "cloudsen12plus":
             raise NotImplementedError(
-                f"Dataset '{dataset_name}' is not implemented in LoRA pipeline yet. "
+                f"Dataset '{dataset_name}' is not implemented in full-finetune pipeline yet. "
                 "Current support: cloudsen12plus"
             )
 
@@ -267,6 +265,7 @@ class DataCollator:
             batch[k] = torch.stack([f[k] for f in features], dim=0)
         return batch
 
+
 class SegTrainer(Trainer):
     def __init__(
         self,
@@ -335,10 +334,9 @@ class SegTrainer(Trainer):
         return (loss, outputs) if return_outputs else loss
 
 
-
 @dataclass
-class LoRAConfig:
-    technique: str = "lora"
+class FullFineTuneConfig:
+    technique: str = "fullfinetune"
     model_name: str = "clipseg"
     dataset_name: str = "cloudsen12plus"
 
@@ -352,13 +350,8 @@ class LoRAConfig:
     prompt_template: str = "{label}"
     image_size: Optional[int] = None
 
-    lora_r: int = 16
-    lora_alpha: int = 32
-    lora_dropout: float = 0.05
-    target_modules: Optional[str] = None
-
     epochs: int = 5
-    lr: float = 1e-4
+    lr: float = 1e-5
     weight_decay: float = 0.01
     warmup_ratio: float = 0.03
     train_bs: int = 16
@@ -397,9 +390,13 @@ class LoRAConfig:
     max_val_images: Optional[int] = None
 
 
-def run_lora(cfg: LoRAConfig) -> None:
-    if cfg.technique.strip().lower() != "lora":
-        raise ValueError(f"LoRA runner received technique='{cfg.technique}'. Expected 'lora'.")
+def run_full_finetune(cfg: FullFineTuneConfig) -> None:
+    technique = cfg.technique.strip().lower().replace("_", "").replace("-", "")
+    if technique not in {"fullfinetune", "full", "fullft"}:
+        raise ValueError(
+            f"Full-finetune runner received technique='{cfg.technique}'. "
+            "Expected one of: fullfinetune, full, full_ft, full-ft."
+        )
 
     if not cfg.data_root:
         raise ValueError("data_root is required")
@@ -421,7 +418,7 @@ def run_lora(cfg: LoRAConfig) -> None:
 
     print(f"[model] {adapter.spec.key} | id={adapter.model_id} | train_size={adapter.image_size}")
     print(f"[dataset] {cfg.dataset_name}")
-    print(f"[technique] LoRA")
+    print(f"[technique] Full fine-tuning")
     print("[prompts]", list(zip(class_ids, prompts)))
     print("[prompt_template]", cfg.prompt_template)
 
@@ -432,27 +429,8 @@ def run_lora(cfg: LoRAConfig) -> None:
         model.gradient_checkpointing_enable()
         print("Enabled gradient checkpointing.")
 
-    target_modules = (
-        _csv_to_list(cfg.target_modules)
-        if cfg.target_modules
-        else list(adapter.spec.default_target_modules)
-    )
-    lora_cfg = LoraConfig(
-        r=cfg.lora_r,
-        lora_alpha=cfg.lora_alpha,
-        lora_dropout=cfg.lora_dropout,
-        target_modules=target_modules,
-        bias="none",
-    )
-    model = get_peft_model(model, lora_cfg)
-
-    bad = [n for n, p in model.named_parameters() if p.requires_grad and "lora_" not in n]
-    if bad:
-        raise RuntimeError(
-            "Pure LoRA violated. Non-LoRA trainable params found, e.g.: "
-            + ", ".join(bad[:10])
-        )
-
+    for p in model.parameters():
+        p.requires_grad = True
     print_trainable_params(model)
 
     train_ds = CloudSENPromptDataset(
@@ -541,14 +519,14 @@ def run_lora(cfg: LoRAConfig) -> None:
     print("Starting training...")
     trainer.train()
 
-    print("Saving final adapter + trainer state...")
+    print("Saving full-finetuned model + trainer state...")
     trainer.save_model(cfg.output_dir)
     processor.save_pretrained(cfg.output_dir)
     print("Done. Saved to:", cfg.output_dir)
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(description="LoRA finetuning runner")
+    ap = argparse.ArgumentParser(description="Full fine-tuning runner")
 
     ap.add_argument("--model_name", type=str, default="clipseg")
     ap.add_argument("--dataset_name", type=str, default="cloudsen12plus")
@@ -564,22 +542,17 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--prompt_template", type=str, default="{label}")
     ap.add_argument("--image_size", type=int, default=None)
 
-    ap.add_argument("--lora_r", type=int, default=16)
-    ap.add_argument("--lora_alpha", type=int, default=32)
-    ap.add_argument("--lora_dropout", type=float, default=0.05)
-    ap.add_argument("--target_modules", type=str, default=None)
-
     ap.add_argument("--epochs", type=int, default=5)
-    ap.add_argument("--lr", type=float, default=1e-4)
+    ap.add_argument("--lr", type=float, default=1e-5)
     ap.add_argument("--weight_decay", type=float, default=0.01)
     ap.add_argument("--warmup_ratio", type=float, default=0.03)
     ap.add_argument("--train_bs", type=int, default=16)
-    ap.add_argument("--eval_bs", type=int, default=2)
+    ap.add_argument("--eval_bs", type=int, default=128)
     ap.add_argument("--grad_accum", type=int, default=1)
     ap.add_argument("--num_workers", type=int, default=4)
 
-    ap.add_argument("--eval_strategy", type=str, default="epoch")
-    ap.add_argument("--save_strategy", type=str, default="epoch")
+    eval_strategy: str = "epoch"
+    save_strategy: str = "epoch"
     ap.add_argument("--logging_steps", type=int, default=50)
     ap.add_argument("--save_total_limit", type=int, default=3)
 
@@ -614,8 +587,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 def main() -> None:
     ap = _build_arg_parser()
     ns = ap.parse_args()
-    cfg = LoRAConfig(**vars(ns))
-    run_lora(cfg)
+    cfg = FullFineTuneConfig(**vars(ns))
+    run_full_finetune(cfg)
 
 
 if __name__ == "__main__":
@@ -623,8 +596,8 @@ if __name__ == "__main__":
 
 
 __all__ = [
-    "LoRAConfig",
-    "run_lora",
+    "FullFineTuneConfig",
+    "run_full_finetune",
     "CloudSENPromptDataset",
     "SegTrainer",
 ]
