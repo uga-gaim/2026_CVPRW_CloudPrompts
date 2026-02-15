@@ -151,6 +151,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--dice_weight", type=float, default=1.0)
     ap.add_argument("--pos_weight", type=float, default=None)
 
+    ap.add_argument("--train_data_pct", type=float, default=None)
+    ap.add_argument("--val_data_pct", type=float, default=None)
+    ap.add_argument("--subset_seed", type=int, default=None)
+
+
     ap.add_argument("--max_train_images", type=int, default=None)
     ap.add_argument("--max_val_images", type=int, default=None)
 
