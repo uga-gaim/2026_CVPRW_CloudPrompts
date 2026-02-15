@@ -67,8 +67,8 @@ class ImprovedSegLoss(torch.nn.Module):
         self,
         focal_alpha: float = 0.75,
         focal_gamma: float = 2.0,
-        tversky_alpha: float = 0.3,   # weight on FP
-        tversky_beta: float = 0.7,    # weight on FN (higher => recall-friendly)
+        tversky_alpha: float = 0.3,
+        tversky_beta: float = 0.7,
         boundary_scale: float = 2.0,
         boundary_kernel_size: int = 3,
         min_boundary_pixels: int = 10,

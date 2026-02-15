@@ -147,7 +147,6 @@ def load_model_and_processor(
     device: str,
     checkpoint_type: str = "auto",
     checkpoint_dir: str | None = None,
-    # legacy flags (kept for backward compatibility)
     use_adapter: bool = False,
     adapter_dir: str | None = None,
 ):
@@ -162,7 +161,6 @@ def load_model_and_processor(
     ckpt_type = _normalize_ckpt_type(checkpoint_type)
     ckpt_dir = checkpoint_dir or adapter_dir
 
-    # Backward compatibility bridge
     if use_adapter and ckpt_type == "base":
         ckpt_type = "adapter"
     if use_adapter and ckpt_type == "auto" and ckpt_dir is None:
@@ -205,7 +203,7 @@ def load_model_and_processor(
         base = CLIPSegForImageSegmentation.from_pretrained(model_id)
         model = PeftModel.from_pretrained(base, ckpt_dir)
 
-    else:  # full
+    else:
         processor = _load_processor_with_fallback(ckpt_dir, model_id)
         model = CLIPSegForImageSegmentation.from_pretrained(ckpt_dir)
 
@@ -223,10 +221,8 @@ def run(
     prompts: list[str] | None = None,
     label_ids: list[int] | None = None,
     skip_existing: bool = True,
-    # new args
     checkpoint_type: str = "auto",
     checkpoint_dir: str | None = None,
-    # legacy args
     use_adapter: bool = False,
     adapter_dir: str | None = None,
 ) -> None:
@@ -295,7 +291,6 @@ def _parse_args():
     ap.add_argument("--device", default=None, help="cuda/cpu/mps (default auto)")
     ap.add_argument("--amp", action="store_true", help="Use autocast fp16 on CUDA")
 
-    # New unified checkpoint args
     ap.add_argument(
         "--checkpoint_type",
         type=str,
@@ -314,7 +309,6 @@ def _parse_args():
         ),
     )
 
-    # Legacy flags (backward compatible)
     ap.add_argument(
         "--use_adapter",
         action="store_true",

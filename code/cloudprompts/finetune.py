@@ -42,7 +42,7 @@ T = TypeVar("T")
 def _dataclass_from_kwargs(cls: Type[T], kwargs: Dict[str, Any]) -> T:
     allowed = {f.name for f in fields(cls)}
     filtered = {k: v for k, v in kwargs.items() if k in allowed}
-    return cls(**filtered)  # type: ignore[arg-type]
+    return cls(**filtered)
 
 
 def run_finetune(
