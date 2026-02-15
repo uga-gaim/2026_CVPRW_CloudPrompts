@@ -1,0 +1,15 @@
+*.ckpt
+__pycache__
+external
+sparcs_data_L8
+code/data/cloudsen12plus/cloudsen12plus_p509
+code/data/cloudsen12plus/export_p509_high_npz
+*.egg-info
+*.err
+*.out
+*sub_lora.sh
+*sub_inf.sh
+*sub_fft.sh
+*.DS_Store
+code/inference/clipseg_cloudsen_zs/masks
+code/fine_tune
