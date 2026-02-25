@@ -7,9 +7,9 @@ code/data/cloudsen12plus/export_p509_high_npz
 *.egg-info
 *.err
 *.out
-*sub_lora.sh
-*sub_inf.sh
-*sub_fft.sh
 *.DS_Store
 code/inference/clipseg_cloudsen_zs/masks
 code/fine_tune
+code/*.sh
+models/
+code/inference/samples/

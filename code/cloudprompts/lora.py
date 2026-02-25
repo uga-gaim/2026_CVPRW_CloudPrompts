@@ -67,8 +67,8 @@ class ImprovedSegLoss(torch.nn.Module):
         self,
         focal_alpha: float = 0.75,
         focal_gamma: float = 2.0,
-        tversky_alpha: float = 0.3,   # weight on FP
-        tversky_beta: float = 0.7,    # weight on FN (higher => recall-friendly)
+        tversky_alpha: float = 0.3,
+        tversky_beta: float = 0.7,
         boundary_scale: float = 2.0,
         boundary_kernel_size: int = 3,
         min_boundary_pixels: int = 10,
@@ -180,6 +180,8 @@ class CloudSENPromptDataset(Dataset):
         prompts: List[str],
         class_ids: List[int],
         prompt_template: str = "{label}",
+        sample_pct: Optional[float] = None,
+        subset_seed: int = 42,
         max_images: Optional[int] = None,
         dataset_name: str = "cloudsen12plus",
     ):
@@ -212,6 +214,18 @@ class CloudSENPromptDataset(Dataset):
                     ids.append(stem)
 
         ids.sort()
+
+        if sample_pct is not None:
+            sample_pct = float(sample_pct)
+            if not (0.0 < sample_pct <= 100.0):
+                raise ValueError(f"sample_pct must be in (0, 100], got {sample_pct}")
+
+            keep_n = max(1, int(np.ceil(len(ids) * (sample_pct / 100.0))))
+            if keep_n < len(ids):
+                rng = np.random.default_rng(int(subset_seed))
+                chosen = rng.choice(len(ids), size=keep_n, replace=False)
+                ids = [ids[i] for i in sorted(chosen.tolist())]
+
         if max_images is not None:
             ids = ids[:max_images]
 
@@ -393,6 +407,11 @@ class LoRAConfig:
     dice_weight: float = 1.0
     pos_weight: Optional[float] = None
 
+    train_data_pct: Optional[float] = None
+    val_data_pct: Optional[float] = None
+    subset_seed: Optional[int] = None
+
+
     max_train_images: Optional[int] = None
     max_val_images: Optional[int] = None
 
@@ -407,6 +426,7 @@ def run_lora(cfg: LoRAConfig) -> None:
         raise ValueError("output_dir is required")
 
     set_seed(cfg.seed)
+    subset_seed = cfg.seed if cfg.subset_seed is None else int(cfg.subset_seed)
 
     prompts = _csv_to_list(cfg.labels)
     class_ids = _csv_to_ints(cfg.class_ids)
@@ -463,9 +483,12 @@ def run_lora(cfg: LoRAConfig) -> None:
         prompts=prompts,
         class_ids=class_ids,
         prompt_template=cfg.prompt_template,
+        sample_pct=cfg.train_data_pct,
+        subset_seed=subset_seed,
         max_images=cfg.max_train_images,
         dataset_name=cfg.dataset_name,
     )
+
     val_ds = CloudSENPromptDataset(
         data_root=cfg.data_root,
         split="val",
@@ -474,6 +497,8 @@ def run_lora(cfg: LoRAConfig) -> None:
         prompts=prompts,
         class_ids=class_ids,
         prompt_template=cfg.prompt_template,
+        sample_pct=cfg.val_data_pct,
+        subset_seed=subset_seed,
         max_images=cfg.max_val_images,
         dataset_name=cfg.dataset_name,
     )
@@ -604,6 +629,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
     ap.add_argument("--dice_weight", type=float, default=1.0)
     ap.add_argument("--pos_weight", type=float, default=None)
+
+    ap.add_argument("--train_data_pct", type=float, default=None)
+    ap.add_argument("--val_data_pct", type=float, default=None)
+    ap.add_argument("--subset_seed", type=int, default=None)
+
 
     ap.add_argument("--max_train_images", type=int, default=None)
     ap.add_argument("--max_val_images", type=int, default=None)
