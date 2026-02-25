@@ -12,3 +12,4 @@ code/inference/clipseg_cloudsen_zs/masks
 code/fine_tune
 code/*.sh
 models/
+code/inference/samples/
