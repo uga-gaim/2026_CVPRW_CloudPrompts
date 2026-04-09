@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cloudprompts"
+version = "0.0.1"
+description = "Low-data supervised adaptation of CLIPSeg for cloud segmentation on CloudSEN12+"
+readme = "README.md"
+license = { text = "CC-BY-4.0" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Harshith Kethavath", email = "harshith@kethavath.com" },
+    { name = "Weiming Hu", email = "weiming@uga.edu" },
+]
+keywords = [
+    "cloud segmentation",
+    "remote sensing",
+    "vision-language models",
+    "CLIPSeg",
+    "fine-tuning",
+    "LoRA",
+    "satellite imagery",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Intended Audience :: Science/Research",
+]
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=1.5",
+    "torch>=2.0",
+    "torchvision>=0.15",
+    "transformers>=4.35",
+    "peft>=0.7",
+    "Pillow>=9.0",
+    "tqdm>=4.64",
+]
+
+[project.urls]
+Repository = "https://github.com/uga-gaim/2026_CloudPrompts"
+Paper = ""
+
+[tool.setuptools]
+packages = ["cloudprompts"]
