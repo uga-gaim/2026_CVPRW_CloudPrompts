@@ -4,7 +4,7 @@
 
 **Lab for Geoinformatics and AI Modeling (GAIM), Department of Geography, The University of Georgia**
 
-📄 [Paper](https://arxiv.org/abs/XXXX.XXXXX) &nbsp;|&nbsp; 🤗 [Models](https://huggingface.co/collections/uga-gaim/2026-cvprw-cloudprompts)
+📄 [Paper](https://arxiv.org/abs/2604.08956) &nbsp;|&nbsp; 🤗 [Models](https://huggingface.co/collections/uga-gaim/2026-cvprw-cloudprompts)
 
 ---
 
@@ -125,14 +125,15 @@ Fine-tuned models are available on HuggingFace under the [`uga-gaim`](https://hu
 If you use this code or models in your research, please cite:
 
 ```bibtex
-@misc{kethavath2026lowdata,
-    title={Low-Data Supervised Adaptation Outperforms Prompting for Cloud Segmentation Under Domain Shift}, 
-    author={Kethavath, Harshith and Hu, Weiming},
-    year={2026},
-    eprint={},
-    archivePrefix={arXiv},
-    primaryClass={cs.CV}
-}  
+@misc{kethavath2026lowdatasupervisedadaptationoutperforms,
+      title={Low-Data Supervised Adaptation Outperforms Prompting for Cloud Segmentation Under Domain Shift}, 
+      author={Harshith Kethavath and Weiming Hu},
+      year={2026},
+      eprint={2604.08956},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2604.08956}, 
+}
 ```
 
 ---
