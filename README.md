@@ -1,6 +1,6 @@
 # Low-Data Supervised Adaptation Outperforms Prompting for Cloud Segmentation Under Domain Shift
 
-#### [Harshith Kethavath](https://www.kethavath.com), [Weiming Hu](https://weiming-hu.github.io/)
+#### [Harshith Kethavath](https://www.kethavath.com), [Weiming Hu](https://weiming.uga.edu)
 
 **Lab for Geoinformatics and AI Modeling (GAIM), Department of Geography, The University of Georgia**
 
